@@ -16,7 +16,7 @@ export async function verifyFirebaseToken(req, res, next) {
     const decoded = await admin.auth().verifyIdToken(token);
 
     const { rows } = await pool.query(
-      'SELECT id, full_name, role, is_active FROM users WHERE firebase_uid = $1',
+      'SELECT id, full_name, phone, photo_url, role, is_active FROM users WHERE firebase_uid = $1',
       [decoded.uid]
     );
     const user = rows[0];
@@ -28,7 +28,7 @@ export async function verifyFirebaseToken(req, res, next) {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'This staff account has been deactivated' } });
     }
 
-    req.user = { id: user.id, role: user.role, full_name: user.full_name };
+    req.user = { id: user.id, role: user.role, full_name: user.full_name, phone: user.phone, photo_url: user.photo_url };
     req.firebaseUid = decoded.uid;
     next();
   } catch (err) {

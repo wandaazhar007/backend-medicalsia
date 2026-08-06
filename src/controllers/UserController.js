@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import cloudinary from '../config/cloudinary.js';
 
 const ALLOWED_ROLES = ['owner', 'admin', 'doctor', 'receptionist', 'pharmacy', 'cashier'];
 
@@ -86,4 +87,55 @@ async function update(req, res) {
   res.json({ data: rows[0] });
 }
 
-export default { list, getById, update };
+// GET /users/me — self-service profile read, any authenticated role.
+async function getMe(req, res) {
+  const { rows } = await pool.query(
+    'SELECT id, full_name, phone, photo_url, role, is_active, created_at FROM users WHERE id = $1',
+    [req.user.id]
+  );
+
+  res.json({ data: rows[0] });
+}
+
+// PATCH /users/me — self-service profile update. Deliberately narrower than
+// PATCH /users/:id — role/is_active are staff-management concerns owned by
+// owner/admin, never self-editable.
+async function updateMe(req, res) {
+  const { full_name, phone } = req.body;
+
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET full_name = COALESCE($1, full_name),
+         phone = COALESCE($2, phone)
+     WHERE id = $3
+     RETURNING id, full_name, phone, photo_url, role, is_active, created_at`,
+    [full_name ?? null, phone ?? null, req.user.id]
+  );
+
+  res.json({ data: rows[0] });
+}
+
+// POST /users/me/photo — multipart upload (see UserRoutes.js for the multer
+// middleware), stores the file on Cloudinary and saves only the resulting URL.
+async function uploadMyPhoto(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'A photo file is required' } });
+  }
+
+  const uploadResult = await new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'medicalsia/staff-photos', resource_type: 'image' },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(req.file.buffer);
+  });
+
+  const { rows } = await pool.query(
+    'UPDATE users SET photo_url = $1 WHERE id = $2 RETURNING photo_url',
+    [uploadResult.secure_url, req.user.id]
+  );
+
+  res.json({ data: rows[0] });
+}
+
+export default { list, getById, update, getMe, updateMe, uploadMyPhoto };
