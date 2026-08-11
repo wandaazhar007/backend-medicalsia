@@ -50,9 +50,11 @@ async function getById(req, res) {
   }
 
   const { rows: medicalRecords } = await pool.query(
-    `SELECT mr.id, mr.complaint, mr.diagnosis, mr.notes, mr.created_at, u.full_name AS doctor_name
+    `SELECT mr.id, mr.complaint, mr.diagnosis, mr.notes, mr.created_at, u.full_name AS doctor_name,
+            i.total_amount AS invoice_total, i.status AS invoice_status
      FROM medical_records mr
      LEFT JOIN users u ON u.id = mr.doctor_id
+     LEFT JOIN invoices i ON i.medical_record_id = mr.id
      WHERE mr.patient_id = $1
      ORDER BY mr.created_at DESC`,
     [id]

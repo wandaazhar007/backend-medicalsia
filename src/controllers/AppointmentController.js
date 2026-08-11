@@ -146,4 +146,25 @@ async function updateStatus(req, res) {
   res.json({ data: rows[0] });
 }
 
-export default { list, getById, create, updateStatus };
+// DELETE /appointments/:id — only while still 'booked' (never checked in, so
+// no queue_number/medical_records/prescriptions reference it yet). Enforced
+// here, not just hidden/disabled in the UI, same pattern as the paid-before-
+// dispense rule in PharmacyController.
+async function remove(req, res) {
+  const { id } = req.params;
+
+  const { rows: existingRows } = await pool.query('SELECT status FROM appointments WHERE id = $1', [id]);
+  const appointment = existingRows[0];
+
+  if (!appointment) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Appointment not found' } });
+  }
+  if (appointment.status !== 'booked') {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Only appointments that have not been checked in can be deleted' } });
+  }
+
+  await pool.query('DELETE FROM appointments WHERE id = $1', [id]);
+  res.status(204).send();
+}
+
+export default { list, getById, create, updateStatus, remove };

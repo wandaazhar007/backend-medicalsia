@@ -104,11 +104,32 @@ async function create(req, res) {
 
   const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  // Resolve which visit (medical_records row) this invoice is for — via the
+  // prescription when there is one, otherwise the patient's most recent
+  // visit that doesn't have an invoice linked yet (covers consultation-only
+  // invoices, which have no prescription_id to trace back through).
+  let medicalRecordId = null;
+  if (prescription_id) {
+    const { rows } = await pool.query('SELECT medical_record_id FROM prescriptions WHERE id = $1', [prescription_id]);
+    medicalRecordId = rows[0]?.medical_record_id || null;
+  } else {
+    const { rows } = await pool.query(
+      `SELECT mr.id
+       FROM medical_records mr
+       LEFT JOIN invoices i ON i.medical_record_id = mr.id
+       WHERE mr.patient_id = $1 AND i.id IS NULL
+       ORDER BY mr.created_at DESC
+       LIMIT 1`,
+      [patient_id]
+    );
+    medicalRecordId = rows[0]?.id || null;
+  }
+
   const { rows: invoiceRows } = await pool.query(
-    `INSERT INTO invoices (patient_id, prescription_id, total_amount, created_by)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO invoices (patient_id, prescription_id, medical_record_id, total_amount, created_by)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, status, total_amount`,
-    [patient_id, prescription_id || null, totalAmount, req.user.id]
+    [patient_id, prescription_id || null, medicalRecordId, totalAmount, req.user.id]
   );
   const invoice = invoiceRows[0];
 

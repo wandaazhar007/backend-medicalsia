@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "migrate": "node src/db/migrate.js"
+    "migrate": "node src/db/migrate.js",
+    "seed:wilayah": "node src/db/seed-wilayah.js"
   },
   "dependencies": {
     "cloudinary": "^2.10.0",

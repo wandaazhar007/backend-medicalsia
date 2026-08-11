@@ -18,6 +18,7 @@ import InvoiceRoutes from './src/routes/InvoiceRoutes.js';
 import ShortfallRoutes from './src/routes/ShortfallRoutes.js';
 import PharmacyRoutes from './src/routes/PharmacyRoutes.js';
 import DashboardRoutes from './src/routes/DashboardRoutes.js';
+import WilayahRoutes from './src/routes/WilayahRoutes.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ app.use('/api/invoices', InvoiceRoutes);
 app.use('/api/shortfalls', ShortfallRoutes);
 app.use('/api/pharmacy', PharmacyRoutes);
 app.use('/api/dashboard', DashboardRoutes);
+app.use('/api/wilayah', WilayahRoutes);
 
 // Fallback error handler — keeps unexpected errors in the standard error shape.
 app.use((err, req, res, next) => {
