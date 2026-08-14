@@ -6,6 +6,7 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 const router = Router();
 
 router.get('/', verifyFirebaseToken, asyncHandler(AppointmentController.list));
+router.get('/completed', verifyFirebaseToken, asyncHandler(AppointmentController.listCompleted));
 router.get('/:id', verifyFirebaseToken, asyncHandler(AppointmentController.getById));
 router.post('/', verifyFirebaseToken, asyncHandler(AppointmentController.create));
 router.patch('/:id/status', verifyFirebaseToken, asyncHandler(AppointmentController.updateStatus));

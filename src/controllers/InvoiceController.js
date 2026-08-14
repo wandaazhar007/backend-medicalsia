@@ -46,9 +46,13 @@ async function getById(req, res) {
   const { id } = req.params;
 
   const { rows: invoiceRows } = await pool.query(
-    `SELECT i.*, p.full_name AS patient_name, p.patient_number
+    `SELECT i.*, p.full_name AS patient_name, p.patient_number,
+            d.full_name AS doctor_name, c.full_name AS cashier_name
      FROM invoices i
      JOIN patients p ON p.id = i.patient_id
+     LEFT JOIN medical_records mr ON mr.id = i.medical_record_id
+     LEFT JOIN users d ON d.id = mr.doctor_id
+     LEFT JOIN users c ON c.id = i.created_by
      WHERE i.id = $1`,
     [id]
   );
@@ -76,12 +80,13 @@ async function getById(req, res) {
 }
 
 // POST /invoices — cashier builds the draft from consultation/service fees
-// plus prescription_items. `excluded_prescription_item_ids` moves those
-// items to 'excluded' (out of stock, bought elsewhere); everything else on
-// the prescription moves to 'included' — this is the point where
-// prescription_items leave 'pending' (see 04-architecture-conventions.md).
+// plus prescription_items and procedure_record_items. `excluded_*_item_ids`
+// moves those items to 'excluded' (out of stock, bought elsewhere, etc.);
+// everything else moves to 'included' — this is the point where
+// prescription_items/procedure_record_items leave 'pending'
+// (see 04-architecture-conventions.md).
 async function create(req, res) {
-  const { patient_id, prescription_id, items, excluded_prescription_item_ids } = req.body;
+  const { patient_id, prescription_id, procedure_record_id, items, excluded_prescription_item_ids, excluded_procedure_item_ids } = req.body;
 
   if (!patient_id || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({
@@ -102,34 +107,48 @@ async function create(req, res) {
     }
   }
 
+  if (procedure_record_id) {
+    const excludedIds = excluded_procedure_item_ids || [];
+    const { rows: procedureItems } = await pool.query(
+      'SELECT id FROM procedure_record_items WHERE procedure_record_id = $1',
+      [procedure_record_id]
+    );
+
+    for (const item of procedureItems) {
+      const nextStatus = excludedIds.includes(item.id) ? 'excluded' : 'included';
+      await pool.query('UPDATE procedure_record_items SET status = $1 WHERE id = $2', [nextStatus, item.id]);
+    }
+  }
+
   const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // Resolve which visit (medical_records row) this invoice is for — via the
-  // prescription when there is one, otherwise the patient's most recent
-  // visit that doesn't have an invoice linked yet (covers consultation-only
-  // invoices, which have no prescription_id to trace back through).
+  // prescription or procedure record when there is one, otherwise the
+  // patient's single most recent visit (covers consultation-only invoices,
+  // which have neither to trace back through). Not restricted to
+  // not-yet-invoiced visits — a visit can have more than one invoice (e.g. a
+  // follow-up service added after the first invoice was already paid), and
+  // they should all still attribute back to the same doctor/visit.
   let medicalRecordId = null;
   if (prescription_id) {
     const { rows } = await pool.query('SELECT medical_record_id FROM prescriptions WHERE id = $1', [prescription_id]);
     medicalRecordId = rows[0]?.medical_record_id || null;
+  } else if (procedure_record_id) {
+    const { rows } = await pool.query('SELECT medical_record_id FROM procedure_records WHERE id = $1', [procedure_record_id]);
+    medicalRecordId = rows[0]?.medical_record_id || null;
   } else {
     const { rows } = await pool.query(
-      `SELECT mr.id
-       FROM medical_records mr
-       LEFT JOIN invoices i ON i.medical_record_id = mr.id
-       WHERE mr.patient_id = $1 AND i.id IS NULL
-       ORDER BY mr.created_at DESC
-       LIMIT 1`,
+      `SELECT id FROM medical_records WHERE patient_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [patient_id]
     );
     medicalRecordId = rows[0]?.id || null;
   }
 
   const { rows: invoiceRows } = await pool.query(
-    `INSERT INTO invoices (patient_id, prescription_id, medical_record_id, total_amount, created_by)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO invoices (patient_id, prescription_id, procedure_record_id, medical_record_id, total_amount, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, status, total_amount`,
-    [patient_id, prescription_id || null, medicalRecordId, totalAmount, req.user.id]
+    [patient_id, prescription_id || null, procedure_record_id || null, medicalRecordId, totalAmount, req.user.id]
   );
   const invoice = invoiceRows[0];
 
@@ -176,6 +195,10 @@ async function pay(req, res) {
   // place prescriptions.status becomes 'paid' (05-business-flow.md).
   if (invoice.prescription_id) {
     await pool.query(`UPDATE prescriptions SET status = 'paid' WHERE id = $1`, [invoice.prescription_id]);
+  }
+  // Procedures have no dispensing step, so 'paid' is their terminal status.
+  if (invoice.procedure_record_id) {
+    await pool.query(`UPDATE procedure_records SET status = 'paid' WHERE id = $1`, [invoice.procedure_record_id]);
   }
 
   res.json({ data: rows[0] });

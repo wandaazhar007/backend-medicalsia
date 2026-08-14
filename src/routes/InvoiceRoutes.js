@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/', verifyFirebaseToken, asyncHandler(InvoiceController.list));
 router.get('/:id', verifyFirebaseToken, asyncHandler(InvoiceController.getById));
-router.post('/', verifyFirebaseToken, requireRole('cashier'), asyncHandler(InvoiceController.create));
-router.patch('/:id/pay', verifyFirebaseToken, requireRole('cashier'), asyncHandler(InvoiceController.pay));
+router.post('/', verifyFirebaseToken, requireRole('owner', 'admin', 'cashier'), asyncHandler(InvoiceController.create));
+router.patch('/:id/pay', verifyFirebaseToken, requireRole('owner', 'admin', 'cashier'), asyncHandler(InvoiceController.pay));
 
 export default router;

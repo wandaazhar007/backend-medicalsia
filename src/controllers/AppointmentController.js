@@ -139,11 +139,65 @@ async function updateStatus(req, res) {
   const queueNumber = status === 'checked_in' && !appointment.queue_number ? await getNextQueueNumber() : appointment.queue_number;
 
   const { rows } = await pool.query(
-    `UPDATE appointments SET status = $1, queue_number = $2 WHERE id = $3 RETURNING *`,
+    `UPDATE appointments SET status = $1, queue_number = $2, updated_at = now() WHERE id = $3 RETURNING *`,
     [status, queueNumber, id]
   );
 
   res.json({ data: rows[0] });
+}
+
+// GET /appointments/completed?date=&search=&page=&limit=
+// Feeds the cashier's "selesai konsultasi" table (CashierPage) so cashiers
+// don't have to search by name — date defaults to today, ordered by most
+// recently completed first via updated_at (set on every status transition).
+async function listCompleted(req, res) {
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+  const date = req.query.date || new Date().toISOString().slice(0, 10);
+  const { search } = req.query;
+  const offset = (page - 1) * limit;
+
+  const conditions = [`a.status = 'completed'`, `a.updated_at::date = $1`];
+  const params = [date];
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`(p.full_name ILIKE $${params.length} OR p.patient_number ILIKE $${params.length})`);
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM appointments a
+     JOIN patients p ON p.id = a.patient_id
+     ${whereClause}`,
+    params
+  );
+  const totalItems = countRows[0].total;
+
+  const { rows } = await pool.query(
+    `SELECT a.id, a.scheduled_at, a.updated_at AS completed_at, a.queue_number,
+            p.id AS patient_id, p.full_name AS patient_name, p.patient_number,
+            d.id AS doctor_id, d.full_name AS doctor_name
+     FROM appointments a
+     JOIN patients p ON p.id = a.patient_id
+     LEFT JOIN users d ON d.id = a.doctor_id
+     ${whereClause}
+     ORDER BY a.updated_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset]
+  );
+
+  res.json({
+    data: rows,
+    pagination: {
+      page,
+      limit,
+      total_items: totalItems,
+      total_pages: Math.ceil(totalItems / limit),
+    },
+  });
 }
 
 // DELETE /appointments/:id — only while still 'booked' (never checked in, so
@@ -167,4 +221,4 @@ async function remove(req, res) {
   res.status(204).send();
 }
 
-export default { list, getById, create, updateStatus, remove };
+export default { list, getById, create, updateStatus, remove, listCompleted };
