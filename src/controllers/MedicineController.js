@@ -1,4 +1,81 @@
 import pool from '../config/db.js';
+import { normalizeRowKeys, parseImportFile } from '../utils/ImportFileParser.js';
+
+// Header aliases (case-insensitive) so staff can prepare the import file in
+// Indonesian, matching the column names they'd naturally use in Excel.
+const HEADER_ALIASES = {
+  name: ['name', 'nama', 'nama obat'],
+  unit: ['unit', 'satuan'],
+  price: ['price', 'harga'],
+  stock_qty: ['stock_qty', 'stok', 'stok awal', 'jumlah stok'],
+  min_stock_alert: ['min_stock_alert', 'stok minimum', 'batas stok minimum'],
+  expiry_date: ['expiry_date', 'kadaluarsa', 'tanggal kadaluarsa', 'exp date'],
+};
+
+const ALL_HEADER_ALIASES = Object.values(HEADER_ALIASES).flat();
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DMY_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+function parseExpiryDate(value) {
+  if (!value) return { ok: true, value: null };
+  if (ISO_DATE_PATTERN.test(value)) return { ok: true, value };
+  const match = DMY_DATE_PATTERN.exec(value);
+  if (match) {
+    const [, day, month, year] = match;
+    return { ok: true, value: `${year}-${month}-${day}` };
+  }
+  return { ok: false };
+}
+
+// Shared by importPreview (informational only) and importCommit (defensive
+// re-check — never trust the rows the client sends back as-is).
+function validateMedicineRow(raw, rowNumber) {
+  const row = normalizeRowKeys(raw, HEADER_ALIASES);
+
+  if (!row.name || !row.unit || !row.price) {
+    return { row_number: rowNumber, valid: false, error: 'name, unit, and price are required' };
+  }
+
+  const price = Number(row.price);
+  if (!Number.isFinite(price) || price < 0) {
+    return { row_number: rowNumber, valid: false, error: 'price must be a non-negative number' };
+  }
+
+  let stockQty = 0;
+  if (row.stock_qty) {
+    stockQty = Number(row.stock_qty);
+    if (!Number.isInteger(stockQty) || stockQty < 0) {
+      return { row_number: rowNumber, valid: false, error: 'stock_qty must be a non-negative integer' };
+    }
+  }
+
+  let minStockAlert = 10;
+  if (row.min_stock_alert) {
+    minStockAlert = Number(row.min_stock_alert);
+    if (!Number.isInteger(minStockAlert) || minStockAlert < 0) {
+      return { row_number: rowNumber, valid: false, error: 'min_stock_alert must be a non-negative integer' };
+    }
+  }
+
+  const expiry = parseExpiryDate(row.expiry_date);
+  if (!expiry.ok) {
+    return { row_number: rowNumber, valid: false, error: 'expiry_date must be YYYY-MM-DD or DD/MM/YYYY' };
+  }
+
+  return {
+    row_number: rowNumber,
+    valid: true,
+    data: {
+      name: row.name,
+      unit: row.unit,
+      price,
+      stock_qty: stockQty,
+      min_stock_alert: minStockAlert,
+      expiry_date: expiry.value,
+    },
+  };
+}
 
 // GET /medicines?page=&limit=&search=
 async function list(req, res) {
@@ -171,4 +248,75 @@ async function getStockLogs(req, res) {
   res.json({ data: rows });
 }
 
-export default { list, getById, create, update, updateStock, getStockLogs };
+// POST /medicines/import/preview — parses + validates only, no DB writes.
+// Lets staff review a bulk file (Fornas list, e-katalog export, internal
+// spreadsheet, etc.) before anything is actually inserted.
+async function importPreview(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'file is required' } });
+  }
+
+  let rawRows;
+  try {
+    rawRows = parseImportFile(req.file, ALL_HEADER_ALIASES);
+  } catch {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Could not parse the uploaded file' } });
+  }
+
+  const rows = rawRows.map((raw, index) => validateMedicineRow(raw, index + 1));
+  const validCount = rows.filter((r) => r.valid).length;
+
+  res.json({
+    data: {
+      rows,
+      summary: { total: rows.length, valid: validCount, invalid: rows.length - validCount },
+    },
+  });
+}
+
+// POST /medicines/import — body: { rows: [{ name, unit, price, stock_qty,
+// min_stock_alert, expiry_date }] }, the normalized `data` shape returned by
+// importPreview. Re-validated defensively per row rather than trusting the
+// client; inserted sequentially (not in a transaction) so a bad row is
+// reported and skipped instead of rolling back rows that were already good.
+async function importCommit(req, res) {
+  const { rows } = req.body;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'rows must be a non-empty array' } });
+  }
+
+  let imported = 0;
+  const failed = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const check = validateMedicineRow(rows[i], i + 1);
+    if (!check.valid) {
+      failed.push({ row_number: check.row_number, name: rows[i]?.name, error: check.error });
+      continue;
+    }
+
+    const { name, unit, price, stock_qty, min_stock_alert, expiry_date } = check.data;
+
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO medicines (name, unit, price, stock_qty, min_stock_alert, expiry_date)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [name, unit, price, stock_qty, min_stock_alert, expiry_date]
+    );
+
+    if (stock_qty > 0) {
+      await pool.query(
+        `INSERT INTO medicine_stock_logs (medicine_id, change_qty, reason, created_by)
+         VALUES ($1, $2, 'restock', $3)`,
+        [inserted[0].id, stock_qty, req.user.id]
+      );
+    }
+
+    imported += 1;
+  }
+
+  res.json({ data: { imported, failed } });
+}
+
+export default { list, getById, create, update, updateStock, getStockLogs, importPreview, importCommit };

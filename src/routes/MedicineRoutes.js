@@ -2,12 +2,15 @@ import { Router } from 'express';
 import MedicineController from '../controllers/MedicineController.js';
 import { verifyFirebaseToken, requireRole } from '../middlewares/AuthMiddleware.js';
 import { asyncHandler } from '../middlewares/asyncHandler.js';
+import { uploadImportFile } from '../middlewares/ImportUploadMiddleware.js';
 
 const router = Router();
 
 router.get('/', verifyFirebaseToken, asyncHandler(MedicineController.list));
 router.get('/:id', verifyFirebaseToken, asyncHandler(MedicineController.getById));
 router.get('/:id/stock-logs', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicineController.getStockLogs));
+router.post('/import/preview', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), uploadImportFile, asyncHandler(MedicineController.importPreview));
+router.post('/import', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicineController.importCommit));
 router.post('/', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicineController.create));
 router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicineController.update));
 router.patch('/:id/stock', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicineController.updateStock));

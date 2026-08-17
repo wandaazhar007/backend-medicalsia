@@ -21,7 +21,7 @@ async function list(req, res) {
   const totalItems = countRows[0].total;
 
   const { rows } = await pool.query(
-    `SELECT id, firebase_uid, full_name, phone, role, is_active, created_at
+    `SELECT id, firebase_uid, full_name, phone, role, is_active, created_at, last_login
      FROM users
      ${whereClause}
      ORDER BY created_at DESC
@@ -45,7 +45,7 @@ async function getById(req, res) {
   const { id } = req.params;
 
   const { rows } = await pool.query(
-    'SELECT id, firebase_uid, full_name, phone, role, is_active, created_at FROM users WHERE id = $1',
+    'SELECT id, firebase_uid, full_name, phone, role, is_active, created_at, last_login FROM users WHERE id = $1',
     [id]
   );
 

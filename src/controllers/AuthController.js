@@ -2,8 +2,11 @@ import admin from '../config/firebase.js';
 import pool from '../config/db.js';
 
 // req.user is already resolved by AuthMiddleware at this point — this just
-// echoes back the session info the frontend needs (id, name, role).
+// echoes back the session info the frontend needs (id, name, role). Also the
+// one backend touchpoint every login/session-restore passes through, so it
+// doubles as where last_login gets stamped for the Users list.
 async function verify(req, res) {
+  await pool.query('UPDATE users SET last_login = now() WHERE id = $1', [req.user.id]);
   res.json({ data: req.user });
 }
 

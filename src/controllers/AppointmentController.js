@@ -44,6 +44,7 @@ async function list(req, res) {
   const { rows } = await pool.query(
     `SELECT a.id, a.scheduled_at, a.queue_number, a.status, a.booked_via, a.created_at,
             p.id AS patient_id, p.full_name AS patient_name, p.patient_number,
+            p.nik AS patient_nik, p.dob AS patient_dob, p.address AS patient_address,
             d.id AS doctor_id, d.full_name AS doctor_name
      FROM appointments a
      JOIN patients p ON p.id = a.patient_id

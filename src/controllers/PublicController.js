@@ -58,6 +58,25 @@ async function findOrCreatePatientByPhone(full_name, phone) {
   return rows[0].id;
 }
 
+// GET /public/booking/check-phone — lets the booking page tell an existing
+// patient apart from a new one before they submit, so it can prefill their
+// name. Matching strips non-digits on both sides so it works regardless of
+// whether the stored phone has dash formatting or not.
+async function checkPhone(req, res) {
+  const digits = String(req.query.phone || '').replace(/\D/g, '');
+
+  if (digits.length < 9) {
+    return res.json({ data: null });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT full_name FROM patients WHERE regexp_replace(phone, '\\D', '', 'g') = $1 LIMIT 1`,
+    [digits]
+  );
+
+  res.json({ data: rows[0] || null });
+}
+
 // POST /public/booking — patient books their own appointment, no login.
 async function createBooking(req, res) {
   const { doctor_id, scheduled_at, full_name, phone } = req.body;
@@ -130,4 +149,4 @@ async function getPharmacyQueue(req, res) {
   res.json({ data: rows, last_call: lastCallRows[0] || null });
 }
 
-export default { getBookingDoctors, createBooking, getQueue, getPharmacyQueue };
+export default { getBookingDoctors, checkPhone, createBooking, getQueue, getPharmacyQueue };
