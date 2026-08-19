@@ -8,5 +8,6 @@ const router = Router();
 router.get('/', verifyFirebaseToken, asyncHandler(DoctorScheduleController.list));
 router.post('/', verifyFirebaseToken, requireRole('owner', 'admin', 'receptionist'), asyncHandler(DoctorScheduleController.create));
 router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin', 'receptionist'), asyncHandler(DoctorScheduleController.update));
+router.delete('/:id', verifyFirebaseToken, requireRole('owner', 'admin', 'receptionist'), asyncHandler(DoctorScheduleController.remove));
 
 export default router;
