@@ -1,7 +1,21 @@
+import admin from '../config/firebase.js';
 import pool from '../config/db.js';
 import cloudinary from '../config/cloudinary.js';
 
 const ALLOWED_ROLES = ['owner', 'admin', 'doctor', 'receptionist', 'pharmacy', 'cashier'];
+
+// Email isn't stored in this table (Firebase Auth is the source of truth) —
+// batch-resolve it via Admin SDK so list/getById can still display it.
+async function attachEmails(rows) {
+  if (rows.length === 0) return rows;
+
+  const { users: firebaseUsers } = await admin.auth().getUsers(
+    rows.map((row) => ({ uid: row.firebase_uid }))
+  );
+  const emailByUid = Object.fromEntries(firebaseUsers.map((u) => [u.uid, u.email]));
+
+  return rows.map((row) => ({ ...row, email: emailByUid[row.firebase_uid] || null }));
+}
 
 // GET /users?page=&limit=&search= — search matches staff name (email lives in
 // Firebase, not in this table, so search is scoped to full_name for now).
@@ -30,7 +44,7 @@ async function list(req, res) {
   );
 
   res.json({
-    data: rows,
+    data: await attachEmails(rows),
     pagination: {
       page,
       limit,
@@ -53,7 +67,8 @@ async function getById(req, res) {
     return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
   }
 
-  res.json({ data: rows[0] });
+  const [enriched] = await attachEmails(rows);
+  res.json({ data: enriched });
 }
 
 // PATCH /users/:id — owner/admin update a staff member's profile, role, or
