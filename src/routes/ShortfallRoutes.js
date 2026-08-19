@@ -5,7 +5,7 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 
 const router = Router();
 
-router.get('/', verifyFirebaseToken, requireRole('cashier'), asyncHandler(ShortfallController.list));
-router.patch('/:id/resolve', verifyFirebaseToken, requireRole('cashier'), asyncHandler(ShortfallController.resolve));
+router.get('/', verifyFirebaseToken, requireRole('owner', 'admin', 'cashier'), asyncHandler(ShortfallController.list));
+router.patch('/:id/resolve', verifyFirebaseToken, requireRole('owner', 'admin', 'cashier'), asyncHandler(ShortfallController.resolve));
 
 export default router;

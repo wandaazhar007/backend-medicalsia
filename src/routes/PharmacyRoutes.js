@@ -5,7 +5,7 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 
 const router = Router();
 
-router.get('/queue', verifyFirebaseToken, requireRole('pharmacy'), asyncHandler(PharmacyController.getQueue));
-router.post('/dispense/:prescriptionId', verifyFirebaseToken, requireRole('pharmacy'), asyncHandler(PharmacyController.dispense));
+router.get('/queue', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(PharmacyController.getQueue));
+router.post('/dispense/:prescriptionId', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(PharmacyController.dispense));
 
 export default router;
