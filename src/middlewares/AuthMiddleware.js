@@ -28,7 +28,7 @@ export async function verifyFirebaseToken(req, res, next) {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'This staff account has been deactivated' } });
     }
 
-    req.user = { id: user.id, role: user.role, full_name: user.full_name, phone: user.phone, photo_url: user.photo_url };
+    req.user = { id: user.id, role: user.role, full_name: user.full_name, phone: user.phone, photo_url: user.photo_url, email: decoded.email || null };
     req.firebaseUid = decoded.uid;
     next();
   } catch (err) {

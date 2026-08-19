@@ -34,6 +34,7 @@ function uploadPhoto(req, res, next) {
 router.get('/me', verifyFirebaseToken, asyncHandler(UserController.getMe));
 router.patch('/me', verifyFirebaseToken, asyncHandler(UserController.updateMe));
 router.post('/me/photo', verifyFirebaseToken, uploadPhoto, asyncHandler(UserController.uploadMyPhoto));
+router.get('/me/login-history', verifyFirebaseToken, asyncHandler(UserController.getMyLoginHistory));
 
 router.get('/', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(UserController.list));
 router.get('/:id', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(UserController.getById));

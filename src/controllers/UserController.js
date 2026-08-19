@@ -153,4 +153,14 @@ async function uploadMyPhoto(req, res) {
   res.json({ data: rows[0] });
 }
 
-export default { list, getById, update, getMe, updateMe, uploadMyPhoto };
+// GET /users/me/login-history — last 5 sign-ins, shown on the Profile page.
+async function getMyLoginHistory(req, res) {
+  const { rows } = await pool.query(
+    'SELECT logged_in_at FROM login_history WHERE user_id = $1 ORDER BY logged_in_at DESC LIMIT 5',
+    [req.user.id]
+  );
+
+  res.json({ data: rows });
+}
+
+export default { list, getById, update, getMe, updateMe, uploadMyPhoto, getMyLoginHistory };

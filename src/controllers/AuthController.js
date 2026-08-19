@@ -7,6 +7,7 @@ import pool from '../config/db.js';
 // doubles as where last_login gets stamped for the Users list.
 async function verify(req, res) {
   await pool.query('UPDATE users SET last_login = now() WHERE id = $1', [req.user.id]);
+  await pool.query('INSERT INTO login_history (user_id) VALUES ($1)', [req.user.id]);
   res.json({ data: req.user });
 }
 
