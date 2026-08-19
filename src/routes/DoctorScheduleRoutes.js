@@ -6,7 +6,7 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 const router = Router();
 
 router.get('/', verifyFirebaseToken, asyncHandler(DoctorScheduleController.list));
-router.post('/', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(DoctorScheduleController.create));
-router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(DoctorScheduleController.update));
+router.post('/', verifyFirebaseToken, requireRole('owner', 'admin', 'receptionist'), asyncHandler(DoctorScheduleController.create));
+router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin', 'receptionist'), asyncHandler(DoctorScheduleController.update));
 
 export default router;
