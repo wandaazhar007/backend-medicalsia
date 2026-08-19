@@ -7,9 +7,9 @@ import { uploadImportFile } from '../middlewares/ImportUploadMiddleware.js';
 const router = Router();
 
 router.get('/', verifyFirebaseToken, asyncHandler(MedicalProcedureController.list));
-router.post('/import/preview', verifyFirebaseToken, requireRole('owner', 'admin'), uploadImportFile, asyncHandler(MedicalProcedureController.importPreview));
-router.post('/import', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(MedicalProcedureController.importCommit));
-router.post('/', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(MedicalProcedureController.create));
-router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin'), asyncHandler(MedicalProcedureController.update));
+router.post('/import/preview', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), uploadImportFile, asyncHandler(MedicalProcedureController.importPreview));
+router.post('/import', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicalProcedureController.importCommit));
+router.post('/', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicalProcedureController.create));
+router.patch('/:id', verifyFirebaseToken, requireRole('owner', 'admin', 'pharmacy'), asyncHandler(MedicalProcedureController.update));
 
 export default router;
