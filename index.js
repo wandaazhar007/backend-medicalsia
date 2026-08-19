@@ -26,7 +26,14 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+// CORS_ORIGIN is a comma-separated allowlist (e.g. "https://demo.medicalsia.com,https://app.medicalsia.com").
+// Falls back to the local Vite dev server so `npm run dev` keeps working without an .env entry.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
