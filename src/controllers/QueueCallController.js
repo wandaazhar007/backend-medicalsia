@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { broadcastQueueUpdate } from '../config/realtime.js';
 
 // POST /queue-calls — records a new call so display screens (which poll)
 // can detect it and trigger the announcement. Doctor and pharmacy calls
@@ -18,6 +19,8 @@ async function create(req, res) {
      RETURNING *`,
     [queue_number, queue_type, req.user.id]
   );
+
+  broadcastQueueUpdate(queue_type);
 
   res.status(201).json({ data: rows[0] });
 }

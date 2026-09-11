@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { broadcastQueueUpdate } from '../config/realtime.js';
 
 const PAYMENT_METHODS = ['cash', 'debit_card', 'credit_card', 'qris'];
 
@@ -195,6 +196,7 @@ async function pay(req, res) {
   // place prescriptions.status becomes 'paid' (05-business-flow.md).
   if (invoice.prescription_id) {
     await pool.query(`UPDATE prescriptions SET status = 'paid' WHERE id = $1`, [invoice.prescription_id]);
+    broadcastQueueUpdate('pharmacy');
   }
   // Procedures have no dispensing step, so 'paid' is their terminal status.
   if (invoice.procedure_record_id) {

@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { broadcastQueueUpdate } from '../config/realtime.js';
 
 // GET /pharmacy/queue — prescriptions ready to dispense. The status = 'paid'
 // filter is enforced here in the query itself, not left to the frontend, so
@@ -112,6 +113,8 @@ async function dispense(req, res) {
     );
     updatedPrescription = rows[0];
   }
+
+  broadcastQueueUpdate('pharmacy');
 
   res.json({ data: updatedPrescription });
 }
