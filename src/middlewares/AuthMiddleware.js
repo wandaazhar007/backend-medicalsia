@@ -12,28 +12,42 @@ export async function verifyFirebaseToken(req, res, next) {
     return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Missing Authorization bearer token' } });
   }
 
+  let decoded;
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    decoded = await admin.auth().verifyIdToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Your session is invalid or has expired. Please sign in again.' } });
+  }
 
+  // Kept separate from token verification so a database outage is never
+  // reported to the user as a bad login.
+  let user;
+  try {
     const { rows } = await pool.query(
       'SELECT id, full_name, phone, photo_url, role, is_active FROM users WHERE firebase_uid = $1',
       [decoded.uid]
     );
-    const user = rows[0];
-
-    if (!user) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'No staff account found for this login' } });
-    }
-    if (!user.is_active) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'This staff account has been deactivated' } });
-    }
-
-    req.user = { id: user.id, role: user.role, full_name: user.full_name, phone: user.phone, photo_url: user.photo_url, email: decoded.email || null };
-    req.firebaseUid = decoded.uid;
-    next();
+    user = rows[0];
   } catch (err) {
-    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or expired Firebase token' } });
+    console.error('[AuthMiddleware] Database lookup failed:', err.message);
+    return res.status(503).json({
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'We cannot reach the clinic database right now. Please try again in a few minutes, or contact your administrator if the problem persists.',
+      },
+    });
   }
+
+  if (!user) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'No staff account found for this login. Please contact your clinic administrator.' } });
+  }
+  if (!user.is_active) {
+    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'This staff account has been deactivated. Please contact your clinic administrator.' } });
+  }
+
+  req.user = { id: user.id, role: user.role, full_name: user.full_name, phone: user.phone, photo_url: user.photo_url, email: decoded.email || null };
+  req.firebaseUid = decoded.uid;
+  next();
 }
 
 // Route guard for endpoints restricted to specific staff roles (e.g. owner/admin).
